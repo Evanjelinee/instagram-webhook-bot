@@ -24,18 +24,16 @@ def verify_webhook():
     return "Forbidden", 403
 
 
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    raw_data = request.get_data(as_text=True)
-    data = request.get_json(silent=True)
+    print("WEBHOOK REACHED", flush=True)
 
-    print("=== WEBHOOK JSON ===")
-    print(data)
-    print("=== WEBHOOK RAW ===")
-    print(raw_data)
-    print("====================")
+    raw_data = request.get_data(as_text=True)
+    print("RAW BODY:", repr(raw_data), flush=True)
 
     return jsonify({"status": "received"}), 200
+
 
 
 @app.route("/privacy", methods=["GET"])
