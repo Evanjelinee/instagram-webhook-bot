@@ -4,13 +4,10 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Переменные окружения
 VERIFY_TOKEN = os.environ.get('META_VERIFY_TOKEN', 'my-secret-token-123')
 ACCESS_TOKEN = os.environ.get('INSTAGRAM_ACCESS_TOKEN')
-IG_USER_ID = '17841431299134110'  # Твой Instagram ID
-CODE_WORD = 'курс'  # Кодовое слово для активации
-DM_MESSAGE = 'Привет! Спасибо за интерес к курсу. Вот ссылка: [твоя ссылка]'
-REPLY_COMMENT = 'Ответила в директ '
+IG_USER_ID = '17841431299134110'
+CODE_WORD = 'курс'
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -19,12 +16,18 @@ def verify_webhook():
     challenge = request.args.get('hub.challenge')
     
     if mode == 'subscribe' and token == VERIFY_TOKEN:
+        print(f"Webhook verified! Challenge: {challenge}")
         return challenge, 200
     return 'Forbidden', 403
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
+    print(f"\n{'='*50}")
+    print(f"ПОЛУЧЕНЫ ДАННЫЕ ОТ META:")
+    print(f"{'='*50}")
+    print(f"Весь запрос: {data}")
+    print(f"{'='*50}\n")
     
     if not data:
         return jsonify({'status': 'no data'}), 200
@@ -32,58 +35,35 @@ def webhook():
     # Обрабатываем комментарии
     if 'entry' in data:
         for entry in data['entry']:
-            if 'messaging' in entry:
-                for event in entry['messaging']:
-                    if 'message' in event:
-                        # Получили сообщение в директ
-                        print(f"Message: {event['message']}")
+            print(f"Entry: {entry}")
             
             if 'changes' in entry:
                 for change in entry['changes']:
+                    print(f"Change: {change}")
+                    print(f"Field: {change.get('field')}")
+                    
                     if change.get('field') == 'comments':
-                        comment_data = change.get('value', {})
-                        comment = comment_data.get('object', {}).get('comment', '')
-                        comment_id = comment_data.get('object', {}).get('id', '')
-                        from_user = comment_data.get('from', {})
-                        user_id = from_user.get('id', '')
+                        value = change.get('value', {})
+                        print(f"Comment value: {value}")
                         
-                        print(f"Comment: {comment}")
-                        
-                        # Проверяем кодовое слово
-                        if CODE_WORD.lower() in comment.lower():
-                            # Отправляем в директ
-                            send_dm(user_id, DM_MESSAGE)
-                            # Отвечаем в комментариях
-                            reply_to_comment(comment_id, REPLY_COMMENT)
+                        # Проверяем разные форматы данных
+                        if 'comment' in value:
+                            comment_text = value['comment'].get('text', '')
+                            comment_id = value['comment'].get('id', '')
+                            from_user = value['comment'].get('from', {})
+                            user_id = from_user.get('id', '')
+                            
+                            print(f"\nКОММЕНТАРИЙ НАЙДЕН!")
+                            print(f"Текст: {comment_text}")
+                            print(f"ID: {comment_id}")
+                            print(f"Пользователь: {user_id}\n")
+                            
+                            if CODE_WORD.lower() in comment_text.lower():
+                                print(f"Кодовое слово '{CODE_WORD}' найдено! Отправляю ответ...")
+                                # send_dm(user_id, "Привет! Спасибо за интерес к курсу.")
+                                # reply_to_comment(comment_id, "Ответила в директ 💌")
     
     return jsonify({'status': 'received'}), 200
-
-def send_dm(user_id, message):
-    """Отправка сообщения в директ"""
-    url = f'https://graph.instagram.com/v18.0/{IG_USER_ID}/messages'
-    payload = {
-        'recipient': {'id': user_id},
-        'message': {'text': message},
-        'access_token': ACCESS_TOKEN
-    }
-    try:
-        response = requests.post(url, json=payload)
-        print(f"DM sent: {response.status_code}")
-    except Exception as e:
-        print(f"Error sending DM: {e}")
-
-def reply_to_comment(comment_id, message):
-    """Ответ на комментарий"""
-    url = f'https://graph.instagram.com/v18.0/{comment_id}/replies'
-    payload = {
-        'message': message,
-        'access_token': ACCESS_TOKEN
-    }
-    try:
-        response = requests.post(url, json=payload)
-        print(f"Reply sent: {response.status_code}")
-    except Exception as e:
-        print(f"Error replying: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
