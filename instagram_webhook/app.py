@@ -68,3 +68,24 @@ def webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+@app.route("/privacy")
+def privacy():
+    return """
+    <h1>Privacy Policy — Curso Bot</h1>
+    <p>Curso Bot processes Instagram usernames, user IDs, comment text
+    and comment IDs to respond to comments and send requested messages.</p>
+    <p>Data is used only to operate the bot and is not sold.
+    Webhook logs may temporarily contain event data.</p>
+    <p>For privacy questions or data deletion requests, contact:
+    evapolkaad@gmail.com</p>
+    """
+
+@app.route("/data-deletion")
+def data_deletion():
+    return """
+    <h1>Data Deletion — Curso Bot</h1>
+    <p>To request deletion of data associated with Curso Bot,
+    email evapolkaad@gmail.com and include your Instagram username.</p>
+    <p>We will review the request and delete data under our control
+    unless retention is legally required.</p>
+    """
