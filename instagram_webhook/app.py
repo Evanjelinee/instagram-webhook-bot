@@ -1,6 +1,5 @@
 
 import os
-import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -9,6 +8,7 @@ VERIFY_TOKEN = os.environ.get(
     "WEBHOOK_VERIFY_TOKEN",
     "dev-verify-token"
 )
+
 ACCESS_TOKEN = os.environ.get("INSTAGRAM_ACCESS_TOKEN")
 
 IG_USER_ID = "17841431299134110"
@@ -34,9 +34,9 @@ def verify_webhook():
 def webhook():
     data = request.get_json(silent=True)
 
-    print("\n=== ПОЛУЧЕНЫ ДАННЫЕ ОТ META ===")
+    print("\n=== WEBHOOK DATA ===")
     print(data)
-    print("================================\n")
+    print("====================\n")
 
     if not data:
         return jsonify({"status": "no data"}), 200
@@ -47,22 +47,27 @@ def webhook():
                 continue
 
             value = change.get("value", {})
+
+            # Meta может прислать комментарий в разных форматах
             comment = value.get("comment", {})
 
-            comment_text = comment.get("text", "")
-            comment_id = comment.get("id", "")
-            from_user = comment.get("from", {})
-            user_id = from_user.get("id", "")
+            comment_text = (
+                comment.get("text")
+                or value.get("text")
+                or ""
+            )
+
+            comment_id = (
+                comment.get("id")
+                or value.get("id")
+                or ""
+            )
 
             print("Комментарий:", comment_text)
             print("ID комментария:", comment_id)
-            print("ID пользователя:", user_id)
 
             if CODE_WORD.lower() in comment_text.lower():
-                print(f"Найдено кодовое слово: {CODE_WORD}")
-
-                # Отправка DM и ответ на комментарий
-                # пока не включены — сначала проверим получение событий
+                print("Найдено кодовое слово:", CODE_WORD)
 
     return jsonify({"status": "received"}), 200
 
@@ -72,8 +77,11 @@ def webhook():
 def privacy():
     return """
     <!DOCTYPE html>
-    <html lang="en">
-    <head><meta charset="UTF-8"><title>Privacy Policy</title></head>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <title>Privacy Policy — Curso Bot</title>
+    </head>
     <body>
         <h1>Privacy Policy — Curso Bot</h1>
         <p>Curso Bot processes Instagram usernames, user IDs,
@@ -91,8 +99,11 @@ def privacy():
 def data_deletion():
     return """
     <!DOCTYPE html>
-    <html lang="en">
-    <head><meta charset="UTF-8"><title>Data Deletion</title></head>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <title>Data Deletion — Curso Bot</title>
+    </head>
     <body>
         <h1>Data Deletion — Curso Bot</h1>
         <p>To request deletion of data associated with Curso Bot,
@@ -104,7 +115,7 @@ def data_deletion():
     """
 
 
-# Главная страница для проверки работы сервиса
+# Проверка работы сервера
 @app.route("/", methods=["GET"])
 def home():
     return "Curso Bot is running!", 200
