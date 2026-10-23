@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-VERIFY_TOKEN = os.environ.get('META_VERIFY_TOKEN', 'my-secret-token-123')
+VERIFY_TOKEN = os.environ.get('WEBHOOK_VERIFY_TOKEN', 'dev-verify-token')
 ACCESS_TOKEN = os.environ.get('INSTAGRAM_ACCESS_TOKEN')
 IG_USER_ID = '17841431299134110'
 CODE_WORD = 'курс'
