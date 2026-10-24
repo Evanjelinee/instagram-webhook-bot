@@ -86,7 +86,7 @@ def handle_comment(value):
     if str(author_id) == IG_USER_ID:
         return
 
-    if comment_text.casefold() != "курс":
+    if comment_text.casefold() != "espanol":
         return
 
     if comment_id in processed_comments:
