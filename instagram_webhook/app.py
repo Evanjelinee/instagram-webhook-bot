@@ -82,7 +82,7 @@ def handle_comment(value):
         return
 
     # Кодовое слово
-    if comment_text.casefold() != "espanol":
+    if comment_text.casefold() != "Испанский":
         return
 
     # Не обрабатываем один комментарий несколько раз
