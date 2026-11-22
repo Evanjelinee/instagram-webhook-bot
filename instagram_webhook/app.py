@@ -10,18 +10,10 @@ app = Flask(__name__)
 VERIFY_TOKEN = os.environ.get('WEBHOOK_VERIFY_TOKEN', 'dev-verify-token')
 ACCESS_TOKEN = os.environ.get('INSTAGRAM_ACCESS_TOKEN')
 IG_USER_ID = '17841431299134110'
-TELEGRAM_URL = 'https://t.me/espano_A1'
 NEW_LINK = 'https://t.me/espano_A1/34'
-KEYWORDS = {'испанский', 'español', 'espanol'}
-LINK_KEYWORD = 'ссылка'
-CONFIRMATIONS = {'подписалась', 'подписался'}
+KEYWORDS = {'испанский', 'español', 'espanol', 'ссылка'}
+CONFIRMATIONS = {'подписалась', 'подписался', 'готово'}
 
-DM_MESSAGE = (
-    'Привет! 💌 Спасибо за интерес к испанскому 🇪🇸\n\n'
-    'Вот ссылка на ресурс:\n'
-    f'{TELEGRAM_URL}\n\n'
-    'Надеюсь, будет полезно 💗'
-)
 LINK_INTRO = (
     'Приветствую! 💌\n\n'
     'Я подготовила материалы для самостоятельного изучения испанского языка — от самых основ до продвинутого уровня. 📚\n\n'
@@ -30,11 +22,17 @@ LINK_INTRO = (
     '🎓 Бесплатный 7-дневный курс для начинающих\n'
     '🧠 Интерактивные карточки для изучения и запоминания слов\n\n'
     '💗 Всё это доступно на моём сайте!\n\n'
-    'Чтобы получить ссылку, подпишись на @evangel1na_b и напиши в ответ «Подписалась» или «Подписался». 💌'
+    'Чтобы получить ссылку, подпишись на @evangel1na_b и напиши в ответ «Готово», «Подписалась» или «Подписался». 💌'
+)
+UNKNOWN_REPLY = (
+    'Кажется, мы немного запутались\n\n'
+    'Чтобы получить доступ к материалам, подпишись на мой аккаунт @evangel1na_b 🇪🇸\n\n'
+    'После подписки просто напиши «Готово», «Подписалась» или «Подписался» — '
+    'я проверю подписку и сразу отправлю ссылку! 💌'
 )
 LINK_SUCCESS = f'Спасибо за подписку! 💗\n\nВот обещанная ссылка:\n{NEW_LINK}\n\n¡Nos vemos! 🇪🇸'
-LINK_NOT_FOLLOWING = 'Пока не вижу подтверждённой подписки 💗 Подпишись на @evangel1na_b и снова напиши «Подписалась» или «Подписался».'
-LINK_CHECK_UNAVAILABLE = 'Пока не получилось проверить подписку 🥹 Попробуй написать «Подписалась» или «Подписался» немного позже 💗'
+LINK_NOT_FOLLOWING = 'Пока не вижу подтверждённой подписки 💗 Подпишись на @evangel1na_b и снова напиши «Готово», «Подписалась» или «Подписался».'
+LINK_CHECK_UNAVAILABLE = 'Пока не получилось проверить подписку 🥹 Попробуй написать «Готово», «Подписалась» или «Подписался» немного позже 💗'
 COMMENT_REPLIES = [
     'Написала тебе в Direct 💌', 'Уже отправила тебе сообщение 💗',
     'Проверь Direct ✨', 'Лови сообщение в Direct 💌',
@@ -48,7 +46,8 @@ FALLBACK_REPLIES = [
 ]
 # Temporary in-memory state: lost on restart and not shared across workers.
 # For reliable production behavior, replace with persistent storage (e.g. PostgreSQL).
-pending_link_users = set()
+pending_users = set()
+reminded_users = set()
 processed_comments = set()
 processed_messages = set()
 state_lock = Lock()
@@ -86,7 +85,7 @@ def get_follow_status(user_id):
         return None
 
 
-def send_direct(user_id, text=DM_MESSAGE):
+def send_direct(user_id, text):
     return api_request(f'{IG_USER_ID}/messages', {
         'recipient': {'id': str(user_id)}, 'message': {'text': text},
     })
@@ -102,13 +101,12 @@ def handle_comment(value):
     author_id = (value.get('from') or {}).get('id')
     if not comment_id or not author_id or str(author_id) == IG_USER_ID:
         return
-    is_link = comment_text == LINK_KEYWORD
-    if comment_text not in KEYWORDS and not is_link:
+    if comment_text not in KEYWORDS:
         return
     with state_lock:
         if comment_id in processed_comments:
             return
-    message_text = LINK_INTRO if is_link else DM_MESSAGE
+    message_text = LINK_INTRO
     try:
         api_request(f'{IG_USER_ID}/messages', {
             'recipient': {'comment_id': str(comment_id)},
@@ -116,8 +114,7 @@ def handle_comment(value):
         })
     except Exception as error:
         print(f'Не удалось отправить Direct: {error}', flush=True)
-        fallback = ('Не получилось написать тебе 💌 Напиши мне в Direct «ссылка» 💗'
-                    if is_link else random.choice(FALLBACK_REPLIES))
+        fallback = random.choice(FALLBACK_REPLIES)
         try:
             reply_to_comment(comment_id, fallback)
             with state_lock:
@@ -125,11 +122,11 @@ def handle_comment(value):
         except Exception as reply_error:
             print(f'Ошибка запасного ответа: {reply_error}', flush=True)
         return
-    if is_link:
-        # The comment's author ID is not always the same ID as the messaging sender ID.
-        # The sender ID is learned from the reply event and linked to the pending flow there.
-        with state_lock:
-            pending_link_users.add(str(author_id))
+    # Meta may use different scoped IDs for comments and Direct.
+    # A confirmation can only be matched when the IDs correspond.
+    with state_lock:
+        pending_users.add(str(author_id))
+        reminded_users.discard(str(author_id))
     try:
         reply_to_comment(comment_id, random.choice(COMMENT_REPLIES))
     except Exception as error:
@@ -149,19 +146,33 @@ def handle_message(event):
     with state_lock:
         if message_id and message_id in processed_messages:
             return
-        pending = str(sender_id) in pending_link_users
+        pending = str(sender_id) in pending_users
     if text in KEYWORDS:
-        send_direct(sender_id)
+        send_direct(sender_id, LINK_INTRO)
+        with state_lock:
+            pending_users.add(str(sender_id))
+            reminded_users.discard(str(sender_id))
     elif text in CONFIRMATIONS and pending:
+        with state_lock:
+            reminded_users.discard(str(sender_id))
         follow_status = get_follow_status(sender_id)
         if follow_status is True:
             send_direct(sender_id, LINK_SUCCESS)
             with state_lock:
-                pending_link_users.discard(str(sender_id))
+                pending_users.discard(str(sender_id))
+                reminded_users.discard(str(sender_id))
         elif follow_status is False:
             send_direct(sender_id, LINK_NOT_FOLLOWING)
         else:
             send_direct(sender_id, LINK_CHECK_UNAVAILABLE)
+    elif pending and text:
+        with state_lock:
+            already_reminded = str(sender_id) in reminded_users
+        if already_reminded:
+            return
+        send_direct(sender_id, UNKNOWN_REPLY)
+        with state_lock:
+            reminded_users.add(str(sender_id))
     else:
         return
     if message_id:
