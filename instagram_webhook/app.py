@@ -11,7 +11,7 @@ ACCESS_TOKEN = os.environ.get('INSTAGRAM_ACCESS_TOKEN')
 IG_USER_ID = '17841431299134110'
 TELEGRAM_URL = 'https://t.me/espano_A1/34'
 
-KEYWORDS = {'испанский', 'español', 'espanol', 'ссылка'}
+KEYWORDS = {"испанский", "español", "espanol", "ссылка", "+"}
 
 DM_MESSAGE = (
     'Приветствую! 💌\n\n'
